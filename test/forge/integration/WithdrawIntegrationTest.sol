@@ -80,6 +80,34 @@ contract WithdrawIntegrationTest is BaseTest {
         morpho.withdraw(marketParams, amountSupplied, 0, SUPPLIER, RECEIVER);
     }
 
+    function testWithdrawCollateralZeroAddress(uint256 amountSupplied, uint256 amountWithdrawn) public {
+        amountSupplied = bound(amountSupplied, 1, MAX_TEST_AMOUNT);
+        amountWithdrawn = bound(amountWithdrawn, 1, amountSupplied);
+
+        loanToken.setBalance(address(this), amountSupplied);
+        collateralToken.setBalance(BORROWER, amountCollateral);
+        morpho.supply(marketParams, amountSupplied, 0, address(this), hex"");
+
+        uint256 expectedSupplyShares = amountSupplied.toSharesDown(0, 0);
+        uint256 expectedWithdrawnShares = amountWithdrawn.toSharesUp(amountSupplied, expectedSupplyShares);
+
+        expectedSupplyShares -= expectedWithdrawnShares;
+
+        (uint256 returnAssets, uint256 returnShares) =
+            morpho.withdraw(marketParams, amountWithdrawn, 0, address(this), RECEIVER);
+
+        assertEq(returnAssets, amountWithdrawn, "returned asset amount");
+        assertEq(returnShares, expectedWithdrawnShares, "returned shares amount");
+        assertEq(morpho.supplyShares(id, address(this)), expectedSupplyShares, "supply shares");
+        assertEq(morpho.totalSupplyShares(id), expectedSupplyShares, "total supply shares");
+        assertEq(morpho.totalSupplyAssets(id), amountSupplied - amountWithdrawn, "total supply");
+        assertEq(loanToken.balanceOf(RECEIVER), amountWithdrawn, "RECEIVER balance");
+        assertEq(loanToken.balanceOf(BORROWER), amountBorrowed, "borrower balance");
+        assertEq(
+            loanToken.balanceOf(address(morpho)), amountSupplied - amountBorrowed - amountWithdrawn, "morpho balance"
+        );
+    }
+
     function testWithdrawAssets(uint256 amountSupplied, uint256 amountBorrowed, uint256 amountWithdrawn) public {
         uint256 amountCollateral;
         (amountCollateral, amountBorrowed,) = _boundHealthyPosition(0, amountBorrowed, oracle.price());
